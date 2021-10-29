@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.Vector;
 
 import jCLD.surenet.tests.LoadNetwork.SeqScorePair;
+import jCLD.surenet.utils.HalfFloatMatrix;
 
 /**
  * Maintains a collection of loops, ensuring
@@ -21,6 +22,8 @@ import jCLD.surenet.tests.LoadNetwork.SeqScorePair;
 public class LoopSet{
 
 	private Set<Sequence> loops = new HashSet<Sequence>();
+//	float[][] distances = null;
+	HalfFloatMatrix distances = null;
 	
 	/**
 	 * Add a loop to this loopset.
@@ -43,6 +46,17 @@ public class LoopSet{
 		for(Sequence l: loops) if(rep.compareTo(l.toString()) == 0) return l;
 		loops.add(loop);
 		return loop;
+	}
+	
+	public void finalize() {
+		int id = 0;
+		for(Sequence l: loops) l.id = id++;
+		distances = new HalfFloatMatrix(id);
+		for(int i = 1; i < id; i++) {
+			for(int j = 0; j < i; j++) {
+				distances.set(i, j, -1);
+			}
+		}
 	}
 	
 	public void report() {
@@ -98,13 +112,32 @@ public class LoopSet{
 	private static int LOOP_REPORT_PERIOD = 100;
 	private static int TIME_LIMIT         = 200;
 	
+	public double getDistance(Sequence a, Sequence b, Concept c) {
+		float d = distances.get(a.id,b.id);
+		if(d == -1) {
+			d = a.distance(b, c, false);
+			distances.set(a.id,b.id, d);
+		}
+		return d;
+	}
+	
+	public float getStoredDistance(Sequence a, Sequence b) {
+		float d = distances.get(a.id,b.id);
+		return (d == -1)  ? Float.POSITIVE_INFINITY : d;
+	}
+	
+	
 	public Map<Concept, Double> getConceptsAndScores(boolean verbose){
 		Map<Concept, Double> ret = new HashMap<Concept, Double>();
 		
 		Vector<Sequence> ls = loopsSortedBySize();
 	        
 		Set<Concept> concepts = new HashSet<Concept>();
-	    for(Sequence s: ls) for(Concept c: s.getAllConcepts()) concepts.add(c);
+	    for(Sequence s: ls) {
+	    	for(Concept c: s.getAllConcepts()) {
+	    		if(!concepts.contains(c)) concepts.add(c);
+	    	}
+	    }
 		    
 	    if(verbose) System.out.println("Entering scoring...");
 		    
@@ -125,25 +158,34 @@ public class LoopSet{
 	    	scoredLoops.add(lastAdded);
 	    	double finalScore = lastAdded.seq.getSize();
 	    	int mainLoopPasses = 0;
+	    	long lastTiming = 0;
 	    	while(sourceLoops.size() > 0) {
 	    		long t = System.currentTimeMillis();
 	    		boolean doChecks = (sourceLoops.size() % LOOP_REPORT_PERIOD == 0);
-	    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 1");
+//	    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 1");
 	    		int innerLoopPasses = 0;
 	    		for(SeqScorePair source: sourceLoops) {
-	    			if(verbose && doChecks) System.out.println("LOAD TIMING BEFORE DISTANCE" + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
-	    			double d = source.seq.distance(lastAdded.seq, c, false);
-	    			if(verbose && doChecks) System.out.println("LOAD TIMING DISTANCE " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+//	    			if(verbose && doChecks) System.out.println("LOAD TIMING BEFORE DISTANCE" + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+
+	    			double d = getDistance(source.seq, lastAdded.seq, c);
+//	    			double d = Math.random();
+//	    			if(verbose && doChecks) System.out.println("LOAD TIMING DISTANCE " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
 	    			if(d < source.score) source.score = d;
 	    			innerLoopPasses++;
-		    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 2");
+//		    		if((lastTiming = ((-1 * t) + (t = System.currentTimeMillis()))) > TIME_LIMIT) {
+//		    			System.out.println("FAILED MAIN TIME 2 at inner loop pass " + innerLoopPasses + " of " + sourceLoops.size() + " timing = " + lastTiming + " ");
+////		    			if(Math.random() < .3) {
+////		    				System.gc();
+////		    				System.out.println("MILLIS GC: " + (System.currentTimeMillis() - t));		    			
+////		    			}
+//		    		}
 	    		}
-	    		if(verbose && doChecks) System.out.println("LOAD TIMING A " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+//	    		if(verbose && doChecks) System.out.println("LOAD TIMING A " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
 	    			    		
 	    		int indexOfMin = 0;
-	    		double min = Double.POSITIVE_INFINITY;
+	    		double min = Float.POSITIVE_INFINITY;
 	    		int indx = 0;
-	    		if(verbose && doChecks) System.out.println("LOAD TIMING B " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+//	    		if(verbose && doChecks) System.out.println("LOAD TIMING B " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
 	    		
 	    		for(SeqScorePair source: sourceLoops) {
 	    			if(source.score < min) {
@@ -151,15 +193,15 @@ public class LoopSet{
 	    				indexOfMin = indx; 
 	    			}
 	    			indx++;
-		    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 3");
+//		    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 3");
 
 	    		}
-	    		if(verbose && doChecks) System.out.println("LOAD TIMING C " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+//	    		if(verbose && doChecks) System.out.println("LOAD TIMING C " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
 	    			    		
 	    		lastAdded = sourceLoops.remove(indexOfMin);
 	    		finalScore += lastAdded.seq.getSize() * lastAdded.score;
     			scoredLoops.add(lastAdded);
-    			if(verbose && doChecks) System.out.println("LOAD TIMING D " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+//    			if(verbose && doChecks) System.out.println("LOAD TIMING D " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
 	    		
 	    		mainLoopPasses++;
 	    		if(doChecks) {

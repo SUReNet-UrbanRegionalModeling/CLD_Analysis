@@ -45,7 +45,7 @@ public class Sequence{
 	}
 	
 	
-	private static long idCounter = 0;
+	private static int idCounter = 0;
 	
 	LinkedList<Link>   links = new LinkedList<Link>();
 	Vector<Integer>    values = null;
@@ -59,7 +59,10 @@ public class Sequence{
 	boolean isClosed = false;
 	
 	int     countOfNegativeInfluenceLinks = 0;
-	long    id;
+	int     id;
+	
+	String representation = null;
+	String shortRep = null;
 	
 	/**
 	 * Creates an empty sequence
@@ -134,6 +137,7 @@ public class Sequence{
 		setCountOfNegativeInfluenceLinks();
 		detectClosedLoop();
 		values = null;
+		shortRep = createShortRep();
 	}
 	
 	/**
@@ -330,7 +334,7 @@ public class Sequence{
      * @param doChecksFlag - If true, gives verbose output
      * @return
      */
-    public double distance(Sequence other, Concept reference, boolean doChecksFlag) {
+    public float distance(Sequence other, Concept reference, boolean doChecksFlag) {
     	long t = System.currentTimeMillis();
 		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT 1");
 
@@ -338,21 +342,10 @@ public class Sequence{
     	boolean gc = false;
     	boolean doChecks = false; // Can set to flag
     	if(doChecks) Utilities.doGC(marker++, gc);
-    	Double d = distances.get(other.id);
-    	if(doChecks) Utilities.doGC(marker++, gc);
-    	if(d != null) return d.doubleValue();
-    	if(doChecks) Utilities.doGC(marker++, gc);
 
-    	d = other.distances.get(id);
-    	if(d != null) {
-    		distances.put(other.id, d);
-    		return d;
-    	}
-    	
-    	if(reference == null) return Double.POSITIVE_INFINITY;
+    	if(reference == null) return Float.POSITIVE_INFINITY;
     	
     	if(doChecks) Utilities.doGC(marker++, gc);
-		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT  2");
 
     	if(doChecks) {
 	    	if(    isLoop                                     == false || 
@@ -362,7 +355,7 @@ public class Sequence{
 		    	   indexOfSourceWithConcept(reference)        == -1    ||
 		    	   other.indexOfSourceWithConcept (reference) == -1) {
 	    	  System.out.println("Not valid- aborting... " + System.lineSeparator());
-	    	  return Double.POSITIVE_INFINITY; // Can only compare two valid loops
+	    	  return Float.POSITIVE_INFINITY; // Can only compare two valid loops
 	    	}
     	}
 		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT 3");
@@ -392,7 +385,11 @@ public class Sequence{
     			System.out.println("ERROR! L2");
     			break;
     		}
-    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT 4");
+    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) {
+    			System.out.println("FAILED TIME AT CHECKPOINT 4 L1 size = " + l1.size() + " L2 size = " + l2.size() + " count = " + count);
+//    			System.gc();
+    			System.out.println("MILLIS GC: " + (System.currentTimeMillis() - t));		    			
+    		}
 
     	}
     	
@@ -405,7 +402,11 @@ public class Sequence{
     	int l1Size = l1.size();
     	int l2Size = l2.size();
     	while((l1.size() != 0) && (l2.size() != 0)) {
-    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT 5");
+    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) {
+    			System.out.println("FAILED TIME AT CHECKPOINT 5 L1 size = " + l1.size() + " L2 size = " + l2.size());
+//    			System.gc();
+    			System.out.println("MILLIS GC: " + (System.currentTimeMillis() - t));		    			
+    		}
 
     		Vector<Integer> longer  = l1;
     		Vector<Integer> shorter = l2;
@@ -416,7 +417,7 @@ public class Sequence{
     		int sizeMin = shorter.size();
         	
     		while(sizeMin > 0 && (l1.firstElement() == l2.firstElement())) {
-    			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 6");
+//    			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 6");
         		longer.remove(0);
         		shorter.remove(0);
         		sizeMin--;
@@ -425,7 +426,7 @@ public class Sequence{
     		
         	// Can do the same with the tail
     		while((sizeMin > 0) && (longer.lastElement() == shorter.lastElement())){
-    			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 7");
+//    			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 7");
         		longer.removeElementAt(longer.size() - 1);;
         		shorter.removeElementAt(shorter.size() - 1);
         		sizeMin--;
@@ -442,8 +443,8 @@ public class Sequence{
    				longer.removeElementAt(longer.size() - 1);
 				deletions++;
 			}
-			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 8");
-			if(l1.size() == l1Size && l2.size() == l2Size) System.out.println("FAILED SIZE LIMIT AT CHECKPOINT 9");
+//			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 8");
+//			if(l1.size() == l1Size && l2.size() == l2Size) System.out.println("FAILED SIZE LIMIT AT CHECKPOINT 9");
 			l1Size = l1.size();
 			l2Size = l2.size();
 
@@ -451,9 +452,7 @@ public class Sequence{
     	if(doChecks) Utilities.doGC(marker++, gc);
 
     	deletions += l1.size() + l2.size(); // Anything left must be deleted
-    	Double ret = new Double((double)deletions/(double)size);
-    	other.distances.put(id, ret);
-    	distances.put(other.id, ret);
+    	Float ret = new Float((float)deletions/(float)size);
     	return ret;
     }
         
@@ -485,7 +484,11 @@ public class Sequence{
      * Gets a String representation
      * @return
      */
-    public String toString() {
+    public String toString(){
+    	return shortRep;
+    }
+    
+    private String createRepresentation(){
     	String ret = isLoop ? "LOOP: " : isClosed ? "CLOSED: " : "SEQUENCE: ";
     	if(links.size() == 0) ret += "<EMPTY>";
     	else {
@@ -496,8 +499,27 @@ public class Sequence{
     					((isClosed == true) && (i == (links.size() - 1)) ? "{" + l.target.getName() + "}" : l.target.getName());
     		}
     	}
+//    	ret.intern();
     	return ret;
     }
+    
+    private String createShortRep(){
+    	String ret = isLoop ? "LOOP: " : isClosed ? "CLOSED: " : "SEQUENCE: ";
+    	if(links.size() == 0) ret += "<EMPTY>";
+    	else {
+    		ret += links.get(0).source.id;
+    		for(int i = 0; i < links.size(); i++) {
+    			Link l = links.get(i);
+    			ret += (l.influence == Influence.INCREASES ? "+" :  "-") + 
+    					((isClosed == true) && (i == (links.size() - 1)) ? "{" + l.target.id + "}" : l.target.id);
+    		}
+    	}
+    	return ret;
+    }
+    
+    
+    
+    
     
     /**
      * Gets a String ID

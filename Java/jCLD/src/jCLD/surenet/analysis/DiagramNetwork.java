@@ -101,6 +101,7 @@ public class DiagramNetwork{
 				while(removeSourcesAndSinks() > 0) { }
 			}
 		}
+		loopSet.finalize();
 		return loopSet;
 	}
 	

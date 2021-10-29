@@ -60,6 +60,10 @@ public class Concept implements NamedPolarityItem, Comparable<NamedPolarityItem>
 		return representation;
 	}
 
+	public String toString() {
+		return representation;
+	}
+	
 	/**
 	 * Changes the polarity from positive to negative
 	 * @return the new value of the polarity

@@ -22,6 +22,7 @@ public class ConceptFactory{
 	 * @return
 	 */
 	public static Concept getConcept(String name) {
+		name.intern();
 		Concept orig = concepts.get(name);
 		if(orig != null) {
 			lastAddedWasNewlyCreated = false;
