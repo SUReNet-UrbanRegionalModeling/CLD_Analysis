@@ -64,6 +64,16 @@ public class Sequence{
 	String representation = null;
 	String shortRep = null;
 	
+	int [] sequenceAsInts;
+	
+	public int[] getSequenceAsInts() {
+		//System.out.println("Getting sequence: " + id + " " + (sequenceAsInts == null ? "Null" : "Found"));
+		return 
+			(sequenceAsInts != null ? 
+				sequenceAsInts :
+			    (sequenceAsInts = Utilities.vectorToIntArray(getListOfValues()))).clone();
+	}
+	
 	/**
 	 * Creates an empty sequence
 	 */
@@ -319,8 +329,8 @@ public class Sequence{
      * @param reference
      * @return
      */
-    public double distance(Sequence other, Concept reference) {
-    	return distance(other, reference, true);
+    public double distance(Sequence other) {
+    	return distance(other, true);
     }
 
     private static int TIME_LIMIT  = 200;
@@ -329,133 +339,110 @@ public class Sequence{
     /**
      * Calculates a distance value between this sequence and another.
      * Assumes both are loops.
+     * 
+     * 
+     * The distance can be of any of several kinds:
+     * 
+     * 
+     * https://en.wikipedia.org/wiki/Levenshtein_distance
+     * https://en.wikipedia.org/wiki/Damerau–Levenshtein_distance
+     * 
+     * 
      * @param other
      * @param reference
      * @param doChecksFlag - If true, gives verbose output
      * @return
      */
-    public float distance(Sequence other, Concept reference, boolean doChecksFlag) {
+    public float distance(Sequence other, boolean doChecksFlag) {
     	long t = System.currentTimeMillis();
 		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT 1");
 
     	int marker = 1;
     	boolean gc = false;
     	boolean doChecks = false; // Can set to flag
-    	if(doChecks) Utilities.doGC(marker++, gc);
-
-    	if(reference == null) return Float.POSITIVE_INFINITY;
     	
-    	if(doChecks) Utilities.doGC(marker++, gc);
-
     	if(doChecks) {
 	    	if(    isLoop                                     == false || 
 		    	   other.isLoop                               == false ||
 		    	   links.size()                               ==  0    ||
-		    	   other.links.size()                         ==  0    ||
-		    	   indexOfSourceWithConcept(reference)        == -1    ||
-		    	   other.indexOfSourceWithConcept (reference) == -1) {
+		    	   other.links.size()                         ==  0) {
 	    	  System.out.println("Not valid- aborting... " + System.lineSeparator());
 	    	  return Float.POSITIVE_INFINITY; // Can only compare two valid loops
 	    	}
     	}
 		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED TIME AT CHECKPOINT 3");
 
-    	if(doChecks) Utilities.doGC(marker++, gc);
-
-    	l1.clear();
-    	l1.addAll(getListOfValues());
-    	l2.clear();
-    	l2.addAll(other.getListOfValues());
-    	
-    	if(doChecks) Utilities.doGC(marker++, gc);
-
-    	Integer ref = reference.id;
-    	int count = 0;
-    	while(l1.firstElement() != ref) {
-    		l1.add(l1.remove(0));
-    		if(count++ > l1.size()) {
-    			System.out.println("ERROR! L1");
-    			break;
-    		}
-    	}
-    	count = 0;
-    	while(l2.firstElement() != ref) {
-    		l2.add(l2.remove(0));
-    		if(count++ > l2.size()) {
-    			System.out.println("ERROR! L2");
-    			break;
-    		}
-    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) {
-    			System.out.println("FAILED TIME AT CHECKPOINT 4 L1 size = " + l1.size() + " L2 size = " + l2.size() + " count = " + count);
-//    			System.gc();
-    			System.out.println("MILLIS GC: " + (System.currentTimeMillis() - t));		    			
-    		}
-
-    	}
-    	
-    	int size      = l1.size() + l2.size() - 2;
-    	int deletions = 0;
-    	
-    	if(doChecks) Utilities.doGC(marker++, gc);
-
-    	count = 0;
-    	int l1Size = l1.size();
-    	int l2Size = l2.size();
-    	while((l1.size() != 0) && (l2.size() != 0)) {
-    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) {
-    			System.out.println("FAILED TIME AT CHECKPOINT 5 L1 size = " + l1.size() + " L2 size = " + l2.size());
-//    			System.gc();
-    			System.out.println("MILLIS GC: " + (System.currentTimeMillis() - t));		    			
-    		}
-
-    		Vector<Integer> longer  = l1;
-    		Vector<Integer> shorter = l2;
-    		if(l1.size() < l2.size()) {
-    			longer  = l2;
-    			shorter = l1;
-    		}
-    		int sizeMin = shorter.size();
-        	
-    		while(sizeMin > 0 && (l1.firstElement() == l2.firstElement())) {
-//    			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 6");
-        		longer.remove(0);
-        		shorter.remove(0);
-        		sizeMin--;
-        	}
-
-    		
-        	// Can do the same with the tail
-    		while((sizeMin > 0) && (longer.lastElement() == shorter.lastElement())){
-//    			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 7");
-        		longer.removeElementAt(longer.size() - 1);;
-        		shorter.removeElementAt(shorter.size() - 1);
-        		sizeMin--;
-        	}
-    		
-    		Integer c = longer.lastElement();
-    		count = 0;
-    		if(shorter.contains(c)) {
-				shorter.remove(c);
-            	deletions++;
-            	sizeMin--;
-			}
-			else {
-   				longer.removeElementAt(longer.size() - 1);
-				deletions++;
-			}
-//			if(count++ > COUNT_LIMIT) System.out.println("FAILED COUNT LIMIT AT CHECKPOINT 8");
-//			if(l1.size() == l1Size && l2.size() == l2Size) System.out.println("FAILED SIZE LIMIT AT CHECKPOINT 9");
-			l1Size = l1.size();
-			l2Size = l2.size();
-
-    	}
-    	if(doChecks) Utilities.doGC(marker++, gc);
-
-    	deletions += l1.size() + l2.size(); // Anything left must be deleted
-    	Float ret = new Float((float)deletions/(float)size);
+       	float denominator = this.getSize() + other.getSize();
+    	int lDist = distLevenshtein(other);
+    	float ret = (float)lDist/denominator;
     	return ret;
+    	
     }
         
+    
+    
+    public int distLevenshtein(Sequence other) {
+    	if(this.equals(other)) return 0;
+    	int[] a = this.getSequenceAsInts();  // Utilities.vectorToIntArray(this.getListOfValues());
+    	int[] b = other.getSequenceAsInts(); // Utilities.vectorToIntArray(other.getListOfValues());
+
+    	return Utilities.distLevenshteinWithRotation(a, b);
+//    	
+//    	// For any two sequences that differ, the minimum
+//    	// Levenshtein distance will be the _larger_ of
+//    	// 1 or the number of elements that appear in one
+//    	// of the sequences but not the other
+//    	int min = Math.abs(a.length - b.length);
+//    	if(min == 0) min = 1;
+// 
+//    	int lowestFound = a.length + b.length; // This is the greatest distance possible
+//    	// Need to try all of the rotations of both sequences,
+//    	// so n x m possibilities... ugh
+////    	mainloop: 
+////    	for(int i = 0; i < a.length; i++) {
+////    		for(int j = 0; j < b.length; j++) {
+////    			int result = Utilities.distLevenshtein(a, b, 1, 1);
+//////    			int rResult = Utilities.distLevenshtein_USING_R(a, b);
+//////    			if(result != rResult) System.out.println("DIFFER WITH R");
+////    			if(result < lowestFound) lowestFound = result;
+////    			if(result == min) { // If this is as low as possible, bail out
+//////    				System.out.println("Found min (" + min + ")- Bailing");
+////    				break mainloop;
+////    			}
+////    			b = Utilities.rotate(b);
+////    		}
+////    		a = Utilities.rotate(a);
+////    	}
+////    	int RResult = lowestFound; // Utilities.distLevenshtein_USING_R_WithRotation(a, b);
+//    	lowestFound = Utilities.distLevenshteinWithRotation(a, b);
+////    	System.out.println("RESULTS WITH LOOPING: Java: " + lowestFound + " R: " + RResult + " " + (RResult == lowestFound ? "MATCH" : "DIFFER") + " With Local = " + LocalResult + " " + (LocalResult == lowestFound ? "MTCH" : "DFFR"));
+////    	System.out.println(Utilities.writeIntArray(a));
+////    	System.out.println(Utilities.writeIntArray(b));
+//    	return lowestFound;
+    }
+    
+    
+    /**
+     * Returns the number of elements in this sequence
+     * that are not found in the other sequence
+     * @return
+     */
+    public int numberOfElementsNotFoundInAnotherSequence(Sequence other) {
+    	int count = 0;
+    	for(Link link: links) {
+    		if(!other.hasSource(link.source)) count++;
+    	}
+    	return count;
+    }
+    
+    public int distDamerauLevenshtein(Sequence other) {
+    	return 0;
+    }
+    
+    public int distOptimalStringAlignment(Sequence other) {
+    	return 0;
+    }
+    
     
     /**
      * A simple way to determine if two sequences are identical.

@@ -1,14 +1,20 @@
 package jCLD.surenet.analysis;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
+import java.util.concurrent.TimeUnit;
 
 import jCLD.surenet.tests.LoadNetwork.SeqScorePair;
 import jCLD.surenet.utils.HalfFloatMatrix;
+import jCLD.surenet.utils.Utilities;
 
 /**
  * Maintains a collection of loops, ensuring
@@ -24,6 +30,7 @@ public class LoopSet{
 	private Set<Sequence> loops = new HashSet<Sequence>();
 //	float[][] distances = null;
 	HalfFloatMatrix distances = null;
+	long halfMatrixHits = 0;
 	
 	/**
 	 * Add a loop to this loopset.
@@ -51,12 +58,7 @@ public class LoopSet{
 	public void finalize() {
 		int id = 0;
 		for(Sequence l: loops) l.id = id++;
-		distances = new HalfFloatMatrix(id);
-		for(int i = 1; i < id; i++) {
-			for(int j = 0; j < i; j++) {
-				distances.set(i, j, -1);
-			}
-		}
+		distances = new HalfFloatMatrix(id, -1f);
 	}
 	
 	public void report() {
@@ -112,12 +114,13 @@ public class LoopSet{
 	private static int LOOP_REPORT_PERIOD = 100;
 	private static int TIME_LIMIT         = 200;
 	
-	public double getDistance(Sequence a, Sequence b, Concept c) {
+	public double getDistance(Sequence a, Sequence b) {
 		float d = distances.get(a.id,b.id);
-		if(d == -1) {
-			d = a.distance(b, c, false);
+		if(d == -1f) {
+			d = a.distance(b, false);
 			distances.set(a.id,b.id, d);
 		}
+		else halfMatrixHits++;
 		return d;
 	}
 	
@@ -126,24 +129,38 @@ public class LoopSet{
 		return (d == -1)  ? Float.POSITIVE_INFINITY : d;
 	}
 	
+
+	
+	private Set<Concept> getAllConcepts(){
+		Set<Concept> concepts = new HashSet<Concept>();
+	    for(Sequence s: loops) {
+	    	for(Concept c: s.getAllConcepts()) {
+	    		if(!concepts.contains(c)) concepts.add(c); // Isn't this automatic- it's a set?
+	    	}
+	    }
+	    return concepts;
+	}
 	
 	public Map<Concept, Double> getConceptsAndScores(boolean verbose){
 		Map<Concept, Double> ret = new HashMap<Concept, Double>();
 		
-		Vector<Sequence> ls = loopsSortedBySize();
-	        
-		Set<Concept> concepts = new HashSet<Concept>();
-	    for(Sequence s: ls) {
-	    	for(Concept c: s.getAllConcepts()) {
-	    		if(!concepts.contains(c)) concepts.add(c);
-	    	}
-	    }
+		Vector<Sequence> ls       = loopsSortedBySize();	        
+		Set<Concept>     concepts = getAllConcepts();
 		    
 	    if(verbose) System.out.println("Entering scoring...");
+	    
+	    
+	    
+	   // writeForRBulkProcessing("/Users/murphy/work/SUReNet/R_Tests/BulkProcess");
+	    
+	    
+	    
 		    
 	    // Loop through all the concepts and get relevance scores
+	    int conceptCount = 0;
 	    for(Concept c: concepts) {
-	    	if(verbose) System.out.println("Scoring concept: " + c.getName());
+	    	conceptCount++;
+	    	if(verbose) System.out.println("Scoring concept: " + c.getName() + " (" + conceptCount + "/" + concepts.size() + ")");
 	    	LinkedList<SeqScorePair> sourceLoops = new LinkedList<SeqScorePair>(); // Score is lowest distance to all current Scored Loops
 	    	Vector<SeqScorePair>     scoredLoops = new Vector<SeqScorePair>(); // Score is lowest distance to all previously entered Source Loops
 		    	
@@ -157,61 +174,103 @@ public class LoopSet{
 	    	SeqScorePair lastAdded = sourceLoops.remove();
 	    	scoredLoops.add(lastAdded);
 	    	double finalScore = lastAdded.seq.getSize();
-	    	int mainLoopPasses = 0;
-	    	long lastTiming = 0;
-	    	while(sourceLoops.size() > 0) {
-	    		long t = System.currentTimeMillis();
-	    		boolean doChecks = (sourceLoops.size() % LOOP_REPORT_PERIOD == 0);
-//	    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 1");
-	    		int innerLoopPasses = 0;
+	    	File continueFlagFile = new File("/Users/murphy/work/SUReNet/continue.txt");
+	    	Date dt = new Date();
+	    	while(sourceLoops.size() > 0) {	    	    		
+	    		System.out.print(dt + " Looping through sourceloops, size = " + sourceLoops.size());	    		
+	    		Utilities.waitAndSee(continueFlagFile, 120);
+	    		halfMatrixHits = 0;
 	    		for(SeqScorePair source: sourceLoops) {
-//	    			if(verbose && doChecks) System.out.println("LOAD TIMING BEFORE DISTANCE" + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
-
-	    			double d = getDistance(source.seq, lastAdded.seq, c);
-//	    			double d = Math.random();
-//	    			if(verbose && doChecks) System.out.println("LOAD TIMING DISTANCE " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+	    			double d = getDistance(source.seq, lastAdded.seq);
 	    			if(d < source.score) source.score = d;
-	    			innerLoopPasses++;
-//		    		if((lastTiming = ((-1 * t) + (t = System.currentTimeMillis()))) > TIME_LIMIT) {
-//		    			System.out.println("FAILED MAIN TIME 2 at inner loop pass " + innerLoopPasses + " of " + sourceLoops.size() + " timing = " + lastTiming + " ");
-////		    			if(Math.random() < .3) {
-////		    				System.gc();
-////		    				System.out.println("MILLIS GC: " + (System.currentTimeMillis() - t));		    			
-////		    			}
-//		    		}
 	    		}
-//	    		if(verbose && doChecks) System.out.println("LOAD TIMING A " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
+	    		System.out.print(" hits = " + halfMatrixHits + "(" + (int)((((double)halfMatrixHits)/sourceLoops.size() * 100d)) + "%)");
 	    			    		
 	    		int indexOfMin = 0;
 	    		double min = Float.POSITIVE_INFINITY;
 	    		int indx = 0;
-//	    		if(verbose && doChecks) System.out.println("LOAD TIMING B " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
-	    		
 	    		for(SeqScorePair source: sourceLoops) {
 	    			if(source.score < min) {
 	    				min = source.score;
 	    				indexOfMin = indx; 
 	    			}
 	    			indx++;
-//		    		if(((-1 * t) + (t = System.currentTimeMillis())) > TIME_LIMIT) System.out.println("FAILED MAIN TIME 3");
-
 	    		}
-//	    		if(verbose && doChecks) System.out.println("LOAD TIMING C " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
-	    			    		
 	    		lastAdded = sourceLoops.remove(indexOfMin);
 	    		finalScore += lastAdded.seq.getSize() * lastAdded.score;
     			scoredLoops.add(lastAdded);
-//    			if(verbose && doChecks) System.out.println("LOAD TIMING D " + ((-1 * t) + (t = System.currentTimeMillis())) + " " + Runtime.getRuntime().freeMemory());
-	    		
-	    		mainLoopPasses++;
-	    		if(doChecks) {
-	    			if(verbose)System.out.println("Main Loop Passes: " + mainLoopPasses + " Inner Loop Passes: " + innerLoopPasses);
-	    			mainLoopPasses  = 0;
-	    		}
+    			System.out.println(" time = " + ((double)((dt.getTime() - ((dt = (new Date())).getTime()))/(-1000d))));
+
 	    	}
 	    	if(verbose) System.out.println("FINALSCORE," + c.getName().replaceAll(" ", "_") + "," + numberOfLoops + "," + finalScore);
 	    	ret.put(c, finalScore);
 	    }
 		return ret;
 	}
+	
+	
+	
+	
+	
+	
+	
+//	private void writeForRBulkProcessing(String filename) {
+//	  String header = "seq1ID,seq2ID,seq1,seq2,minimumVal" + System.lineSeparator();
+//	  System.out.println("Starting write for bulk file...");
+//	  try {
+//        FileWriter writer = new FileWriter(filename + ".csv");
+//        writer.write(header);
+//        
+//        
+//        Vector<Sequence> ls       = loopsSortedBySize();	        
+//        System.out.println("Looping; total possible = " + (ls.size() * (ls.size() - 1) / 2));
+//        int count = 1;
+//        int countWritten = 0;
+//        int tenMillions  = 0;
+//		for(int i = 0; i < ls.size() - 1; i++) {
+//			Sequence s1 = ls.elementAt(i);
+//			for(int j = 1; j < ls.size(); j++) {
+//				Sequence s2 = ls.elementAt(j);
+//				int numNotInCommon = s1.numberOfElementsNotFoundInAnotherSequence(s2) + s2.numberOfElementsNotFoundInAnotherSequence(s1);
+//				if(numNotInCommon != s1.getSize() + s2.getSize()) {
+//					if(!distances.check(s1.id,  s2.id, -2f)){
+//						// Write to the file
+//						writer.write(s1.id + "," + 
+//						             s2.id + "," + 
+//								     Utilities.writeIntArray(s1.getSequenceAsInts(), "|") + "," + 
+//						             Utilities.writeIntArray(s2.getSequenceAsInts(), "|") + "," +
+//								     ((numNotInCommon)) +
+//								     System.lineSeparator());
+//						countWritten++;
+//					}
+//				}
+//
+//				if(count % 100000 == 0) System.out.print(".");
+//				if(count % 1000000 == 0) System.out.print(" ");
+//				if(count % 1000000 == 0) {
+//					System.out.println(tenMillions++);
+//					writer.close();
+//					writer = new FileWriter(filename + "_" + tenMillions + ".csv");
+//			        writer.write(header);
+//				}
+//				count++;
+//			}
+//		}
+//       
+//        writer.close();
+//        System.out.println();
+//        System.out.println("Successfully wrote " + countWritten + " lines to file.");
+//      } catch (IOException e) {
+//        System.out.println("An error occurred.");
+//        e.printStackTrace();
+//      }
+//	  System.out.println("Done with write for bulk file.");
+//		
+//		
+//		
+//	}
+//	
+//	private void readFromRBulkProcessing(String filename) {
+//		
+//	}
 }
