@@ -1,7 +1,12 @@
 package jCLD.surenet.analysis;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Scanner;
+import java.util.TreeSet;
+import java.util.Vector;
 
 /**
  * Creates instances of concepts. Ensures that
@@ -42,5 +47,41 @@ public class ConceptFactory{
 	public static boolean getLastAddedWasNewlyCreated() {
 		return lastAddedWasNewlyCreated;
 	}
+	
+	public static void loadConceptSetFromNetworkFile(String filename) {
+	  System.out.println("Starting load of concepts from network...");
+	  try {
+        File myObj = new File(filename);
+        Scanner myReader = new Scanner(myObj);
+    	
+        TreeSet<String> allConceptNames = new TreeSet<String>();
+        
+        String data = myReader.nextLine(); // Skip the first line
+        while (myReader.hasNextLine()) {
+          data = myReader.nextLine();  
+          String[]  info      = data.split(",");
+          allConceptNames.add(info[0]);
+          allConceptNames.add(info[1]);
+        }
+        myReader.close();
+        
+        for(String conceptName: allConceptNames) {
+        	Concept c = getConcept(conceptName);
+        	System.out.println(c.getId() + ": " + conceptName);
+        }
+        
+      } catch (FileNotFoundException e) {
+        System.out.println("An error occurred.");
+        e.printStackTrace();
+      }
+	    
+	}
+	
+	public static Vector<Concept> getAll(){
+		Vector<Concept> ret = new Vector<Concept>();
+		ret.addAll(concepts.values());
+		return ret;
+	}
+	
 	
 }

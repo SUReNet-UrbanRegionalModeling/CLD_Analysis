@@ -27,7 +27,7 @@ import jCLD.surenet.utils.Utilities;
  * has a target equal to the source of the first link 
  * 
  */
-public class Sequence{
+public class Sequence implements Comparable{
 	
 	/**
 	 * Specifies the possible sequence types:
@@ -538,5 +538,10 @@ public class Sequence{
     	for(Link l: links) if((l.source.compareTo(source) == 0) && (l.target.compareTo(target) == 0)) return true;
     	return false;
     }
+
+	@Override
+	public int compareTo(Object other){
+		return (other instanceof Sequence) ? shortRep.compareTo(((Sequence)other).shortRep) : -1;
+	}
     
 }

@@ -1,6 +1,9 @@
 package jCLD.surenet.analysis;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Date;
@@ -8,11 +11,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.Vector;
 import java.util.concurrent.TimeUnit;
 
-import jCLD.surenet.tests.LoadNetwork.SeqScorePair;
 import jCLD.surenet.utils.HalfFloatMatrix;
 import jCLD.surenet.utils.Utilities;
 
@@ -26,8 +30,75 @@ import jCLD.surenet.utils.Utilities;
  * existed.
  */
 public class LoopSet{
+	
 
-	private Set<Sequence> loops = new HashSet<Sequence>();
+	public static class SeqScorePair{
+		public Sequence seq;
+		public double score;
+		
+		public SeqScorePair(Sequence sequence, double s) {
+			seq   = sequence;
+			score = s;
+		}
+	}
+	
+	
+	public static void moveFromPrecalc(String path, String inputFileName, int startLine, int countLines, String outputFilename, String continueFlagFileName) {
+		try {
+			File continueFlagFile = new File(path + continueFlagFileName);
+			FileWriter writer = new FileWriter(path + outputFilename);
+	        Scanner reader = new Scanner(new File(path + inputFileName));
+	    	
+	        int lineCount = 0;
+	        int readLines = 0;
+	        while(reader.hasNextLine() && readLines < countLines) {
+	        	Utilities.waitAndSee(continueFlagFile, 2);
+	        	String line = reader.nextLine();
+	        	lineCount++;
+	        	if(lineCount > startLine) {
+	        		if(line.endsWith("]")) writer.write(line + System.lineSeparator()); // Just copy the pre-calculated
+	        		else {
+	        			String[] elements = line.split("\\|");
+	        			String[] s1 = elements[2].split(",");
+	        			int[] seq1 = new int[s1.length];
+	        			for(int i = 0; i < s1.length; i++) seq1[i] = Integer.parseInt(s1[i]);
+	        			String[] s2 = elements[3].split(",");
+	        			int[] seq2 = new int[s2.length];
+	        			for(int i = 0; i < s2.length; i++) seq2[i] = Integer.parseInt(s2[i]);
+	        			
+	        			double dist = Utilities.distLevenshteinWithRotation(seq1, seq2);
+	        			writer.write(elements[0] + "|" + elements[1] + "|[" + dist + "]" + System.lineSeparator());
+	        		}
+	        		readLines++;
+	        	}
+	        	if(readLines > 0) {
+		        	if(lineCount % 1000 == 0) {
+		        		System.out.print(".");
+		        		if(lineCount % 10000 == 0) {
+		        			System.out.println((new Date()).toString() + " " + readLines + " lines processed");
+		        		}
+		        	}
+	        	}
+	        }
+	        reader.close();
+			writer.close();
+			System.out.println();
+			System.out.println("Done; read " + readLines + " lines");
+		} 
+		catch (IOException E) {
+	        System.out.println("Error: " + E.getMessage());
+	        E.printStackTrace();
+	    }
+		
+	}
+	
+	
+	
+	
+	
+	
+
+	private Set<Sequence> loops = new TreeSet<Sequence>();
 //	float[][] distances = null;
 	HalfFloatMatrix distances = null;
 	long halfMatrixHits = 0;
@@ -58,6 +129,9 @@ public class LoopSet{
 	public void finalize() {
 		int id = 0;
 		for(Sequence l: loops) l.id = id++;
+		for(Sequence l: loops) {
+			System.out.println(l.id + ": " + l.shortRep);
+		}
 		distances = new HalfFloatMatrix(id, -1f);
 	}
 	
@@ -147,14 +221,7 @@ public class LoopSet{
 		Vector<Sequence> ls       = loopsSortedBySize();	        
 		Set<Concept>     concepts = getAllConcepts();
 		    
-	    if(verbose) System.out.println("Entering scoring...");
-	    
-	    
-	    
-	   // writeForRBulkProcessing("/Users/murphy/work/SUReNet/R_Tests/BulkProcess");
-	    
-	    
-	    
+	    if(verbose) System.out.println("Entering scoring...");    
 		    
 	    // Loop through all the concepts and get relevance scores
 	    int conceptCount = 0;
@@ -208,11 +275,179 @@ public class LoopSet{
 		return ret;
 	}
 	
+	private static String addSuffixAndLCFExtension(String filename, int index) {
+		return filename + "_" + ("0000" + index).substring(("0000" + index).length() - 3) + ".lcf";
+	}
+	
+	// Writes a file with all sequences, their IDs,
+	// and the version that needs to be compared
+	// Omits initial elements if they are identical
+	public void writeOnlyComparisonsToFile(String filename, long maxLinesPerFile, boolean pauseBetweenFiles) {
+		Vector<Sequence> sequencesInOrder = new Vector<Sequence>();
+		for(Sequence loop: loops) {
+			loop.getSequenceAsInts(); // This will initialize all of these
+			sequencesInOrder.add(loop);
+		}
+		int size = sequencesInOrder.size();
+		int comps = (size * (size -1 )/ 2);
+		System.out.println(size + " loops; " + comps  + " possible comparisons.");
+		String sep = "";
+		int count = 0;
+		int precalc = 0;
+		int linesInCurrentFile = 0;
+		int currentFile = 0;
+		
+		try {
+			String currentFilename = addSuffixAndLCFExtension(filename, currentFile);
+			FileWriter writer = new FileWriter(currentFilename);
+			for(int i = 0; i < sequencesInOrder.size() - 1; i++) {
+				Sequence seq1 = sequencesInOrder.get(i);
+				for(int j = i + 1; j < sequencesInOrder.size(); j++) {
+					Sequence seq2 = sequencesInOrder.get(j);
+					
+					StringBuilder s = new StringBuilder();
+					s.append(seq1.id + "," + seq1.getSize());
+					s.append("|");
+					s.append(seq2.id + "," + seq2.getSize());
+					s.append("|");
+	
+					int start = 0;
+					int minLength = Math.min(seq1.sequenceAsInts.length, seq2.sequenceAsInts.length);
+					while((start < minLength) && (seq1.sequenceAsInts[start] == seq2.sequenceAsInts[start])) start++;
+					
+					// In this case, the beginning of one of the sequences is the entirety of another,
+					// e.g.:
+					//     A  B  C  D
+					//     A  B  C
+					// The Levenshtein distance will be the difference in their lengths
+					if(start == minLength) {
+						s.append("[" + Math.abs(seq1.sequenceAsInts.length - seq2.sequenceAsInts.length) + "]");
+						precalc++;
+					}
+					else if(seq1.sequenceAsInts.length == start + 1 && seq2.sequenceAsInts.length == start +1) {
+						// This is the case where both sequences start the same but have one ending element different
+						s.append("[1]");
+						precalc++;
+					}
+					else {
+						
+						sep = "";
+						for(int x = start; x < seq1.sequenceAsInts.length; x++) {
+							s.append(sep);
+							s.append(seq1.sequenceAsInts[x]);
+							sep = ",";
+						}
+						s.append("|");
+						sep = "";
+						for(int x = start; x < seq2.sequenceAsInts.length; x++) {
+							s.append(sep);
+							s.append(seq2.sequenceAsInts[x]);
+							sep = ",";
+						}
+					}
+					count++;
+					if(count % 10000 == 0) {
+						System.out.print(".");
+						if(count % 500000 == 0) {
+							System.out.println(" " + ((new Date()).toString()) + " Completed " + count + " of " + comps + " comparisons with " + precalc + " precalculated");
+						}
+					}
+					writer.write(s.toString() + System.lineSeparator());
+					linesInCurrentFile++;
+					if(linesInCurrentFile == maxLinesPerFile) {
+						writer.close();
+						if(pauseBetweenFiles == true) {
+							System.out.println();
+							System.out.println("Paused: Move the previous file (" + currentFilename + ") to continue");
+							File f = new File(currentFilename);
+							while(f.exists()) {
+								try{
+									TimeUnit.SECONDS.sleep(10);
+								}
+								catch(Exception E) {}
+							}
+						}
+						else {
+							System.out.println();
+							System.out.println("File " + currentFilename + " complete");
+						}
+						currentFile++;
+						currentFilename = addSuffixAndLCFExtension(filename, currentFile);
+						writer = new FileWriter(currentFilename);
+						linesInCurrentFile = 0;
+					}
+				}
+				
+			}
+		    writer.close();
+		} 
+		catch (IOException E) {
+	        System.out.println("Error: " + E.getMessage());
+	        E.printStackTrace();
+	    }
+
+	}
 	
 	
-	
-	
-	
+	public void readPrescores(String path, String[] filenames) {
+		try {
+			for(String filename: filenames) {
+				System.out.println("Scanning " + filename);
+				Scanner reader = new Scanner(new File(path + filename));
+				int lineCount       = 0;
+				int skippedLines    = 0;
+				int readLines       = 0;
+				int countNewValue   = 0;
+				int countAlreadySet = 0;
+				int countMisMatch   = 0;
+				while(reader.hasNextLine()) {
+					String line = reader.nextLine();
+					lineCount++;
+					if((line.endsWith("]"))) {
+						readLines++;
+						String[] elements = line.split("\\|");
+						String[] element1 = elements[0].split(",");
+						int id1 = Integer.parseInt(element1[0]);
+						int len1 = Integer.parseInt(element1[1]);
+						
+						String[] element2 = elements[1].split(",");
+						int id2 = Integer.parseInt(element2[0]);
+						int len2 = Integer.parseInt(element2[1]);
+						
+						double score = Double.parseDouble(elements[2].substring(1).replace("]","")) / (double)(len1 + len2);
+						float prevScore = distances.push(id1,  id2, (float)score);
+						if(prevScore == -1f) countNewValue++;
+						else {
+							if(prevScore == (float)score) countAlreadySet++;
+							else {
+								System.err.println();
+								System.err.println("Mismatch! Seq 1 = " + id1 + " Seq 2 " + id2 + " Previous: " + prevScore + " New: " + (float)score);
+								countMisMatch++;
+							}
+						}						
+					}
+					else skippedLines++;
+					
+					if(lineCount % 100000 == 0) {
+						System.out.print(".");
+						if(lineCount % 1000000 == 0) {
+							System.out.println(" processed " + lineCount + " lines");
+						}
+					}
+					
+				}				
+				reader.close();
+				System.out.println();
+				System.out.println("Done reading prescores from " + filename + " " + lineCount + " lines, " + readLines + " read, " + skippedLines + " skipped, " + countAlreadySet + " already set, " + countNewValue + " new values, " + countMisMatch + " mismatches");
+			}
+		}
+		catch(Exception E) {
+			System.out.println(E.getMessage());
+			E.printStackTrace();
+		}
+		int[] unassigned = distances.countAssigned(loops.size(), -1f);
+		for(int i = 0; i < unassigned.length; i++) if(unassigned[i] > 0 ) System.out.println("Loop " + i + " has " + unassigned[i] + " unassigned values");
+	}
 	
 //	private void writeForRBulkProcessing(String filename) {
 //	  String header = "seq1ID,seq2ID,seq1,seq2,minimumVal" + System.lineSeparator();
@@ -273,4 +508,33 @@ public class LoopSet{
 //	private void readFromRBulkProcessing(String filename) {
 //		
 //	}
+	
+	private static String suffix(int val) {
+		return suffix(val, 5);
+	}
+	
+	private static String suffix(int val, int digits) {
+		String sfx = "";
+		while(sfx.length() < digits) sfx += "0";
+		sfx += "" + val;
+		sfx = sfx.substring(sfx.length() - digits);
+		return sfx;
+		
+	}
+	
+	public static void main(String[] args) {
+		String path           ="/Volumes/General/SUReNet/Data_And_Runs/SUReNet_1_Links_WithUrbanAndRuralFlooding/";
+
+		int startLine = 19000000;
+		int lineCount =  1000001;
+
+		int BASE_ITEM = 3;
+		
+		for(int item = BASE_ITEM; item < 41; item += 50) {
+			String whichfile = suffix(item,3);
+			String comparisonFile = "pairs_" + whichfile + ".lcf";
+			LoopSet.moveFromPrecalc(path, comparisonFile, startLine, lineCount, "fileOut_"+ whichfile + "_003.txt", "continue_003_" + BASE_ITEM + ".txt");			
+		}		
+	}
+	
 }

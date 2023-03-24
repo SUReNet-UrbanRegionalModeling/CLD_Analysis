@@ -36,6 +36,16 @@ public class HalfFloatMatrix{
 		return false;
 	}
 	
+	// Pushes a new value into the specified position,
+	// while returning the original value. Allows
+	// calling routine to determine if value changed.
+	public float push(int x, int y, float val) {
+		int indx = getIndex(x,y);
+		float ret = data[indx];
+		data[indx] = val;
+		return ret;
+	}
+	
 	public int getIndex(int x, int y) {
 		int low = x;
 		int high = y;
@@ -46,5 +56,14 @@ public class HalfFloatMatrix{
 		return ((high * (high - 1))/2) + low;
 	}
 	
+	public int[] countAssigned(int highestValue, float comparison) {
+		int[] ret = new int[highestValue];
+		for(int i = 0; i < highestValue - 1; i++) {
+			for(int j = i+1; j < highestValue; j++) {
+				if(get(j, i) == comparison) ret[i]++;
+			}
+		}
+		return ret;
+	}
 	
 }
